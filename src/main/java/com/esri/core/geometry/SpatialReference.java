@@ -1,5 +1,5 @@
 /*
- Copyright 1995-2017 Esri
+ Copyright 1995-2018 Esri
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,13 +24,10 @@
 
 package com.esri.core.geometry;
 
+import com.fasterxml.jackson.core.JsonParser;
+
 import java.io.ObjectStreamException;
 import java.io.Serializable;
-
-import com.esri.core.geometry.SpatialReference;
-import com.esri.core.geometry.SpatialReferenceSerializer;
-import com.esri.core.geometry.VertexDescription;
-import com.fasterxml.jackson.core.JsonParser;
 
 /**
  * A class that represents the spatial reference for the geometry.

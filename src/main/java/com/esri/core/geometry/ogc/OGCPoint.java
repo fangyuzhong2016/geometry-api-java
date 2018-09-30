@@ -1,5 +1,5 @@
 /*
- Copyright 1995-2017 Esri
+ Copyright 1995-2018 Esri
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@
 
 package com.esri.core.geometry.ogc;
 
-import java.nio.ByteBuffer;
-
 import com.esri.core.geometry.GeometryEngine;
 import com.esri.core.geometry.MultiPoint;
 import com.esri.core.geometry.Operator;
@@ -36,7 +34,13 @@ import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.WkbExportFlags;
 import com.esri.core.geometry.WktExportFlags;
 
+import java.nio.ByteBuffer;
+
+import static com.esri.core.geometry.SizeOf.SIZE_OF_OGC_POINT;
+
 public final class OGCPoint extends OGCGeometry {
+	public static String TYPE = "Point";
+	
 	public OGCPoint(Point pt, SpatialReference sr) {
 		point = pt;
 		esriSR = sr;
@@ -74,7 +78,13 @@ public final class OGCPoint extends OGCGeometry {
 
 	@Override
 	public String geometryType() {
-		return "Point";
+		return TYPE;
+	}
+
+	@Override
+	public long estimateMemorySize()
+	{
+		return SIZE_OF_OGC_POINT + (point != null ? point.estimateMemorySize() : 0);
 	}
 
 	@Override
@@ -104,6 +114,11 @@ public final class OGCPoint extends OGCGeometry {
 	public OGCGeometry convertToMulti()
 	{
 		return new OGCMultiPoint(point, esriSR);
+	}
+	
+	@Override
+	public OGCGeometry reduceFromMulti() {
+		return this;
 	}
 
 	com.esri.core.geometry.Point point;

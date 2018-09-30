@@ -1,5 +1,5 @@
 /*
- Copyright 1995-2017 Esri
+ Copyright 1995-2018 Esri
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -34,9 +34,14 @@ import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.SpatialReference;
 import com.esri.core.geometry.WkbExportFlags;
 import com.esri.core.geometry.WktExportFlags;
+
 import java.nio.ByteBuffer;
 
+import static com.esri.core.geometry.SizeOf.SIZE_OF_OGC_POLYGON;
+
 public class OGCPolygon extends OGCSurface {
+	public static String TYPE = "Polygon";
+	
 	public OGCPolygon(Polygon src, int exteriorRing, SpatialReference sr) {
 		polygon = new Polygon();
 		for (int i = exteriorRing, n = src.getPathCount(); i < n; i++) {
@@ -106,7 +111,13 @@ public class OGCPolygon extends OGCSurface {
 
 	@Override
 	public String geometryType() {
-		return "Polygon";
+		return TYPE;
+	}
+
+	@Override
+	public long estimateMemorySize()
+	{
+		return SIZE_OF_OGC_POLYGON + (polygon != null ? polygon.estimateMemorySize() : 0);
 	}
 
 	@Override
@@ -130,6 +141,11 @@ public class OGCPolygon extends OGCSurface {
 	public OGCGeometry convertToMulti()
 	{
 		return new OGCMultiPolygon(polygon, esriSR);
+	}
+	
+	@Override
+	public OGCGeometry reduceFromMulti() {
+		return this;
 	}
 	
 	Polygon polygon;

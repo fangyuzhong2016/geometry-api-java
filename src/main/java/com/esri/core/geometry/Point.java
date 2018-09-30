@@ -28,6 +28,8 @@ import com.esri.core.geometry.VertexDescription.Semantics;
 
 import java.io.Serializable;
 
+import static com.esri.core.geometry.SizeOf.SIZE_OF_POINT;
+
 /**
  * A Point is a zero-dimensional object that represents a specific (X,Y)
  * location in a two-dimensional XY-Plane. In case of Geographic Coordinate
@@ -370,6 +372,12 @@ public class Point extends Geometry implements Serializable {
 	}
 
 	@Override
+	public long estimateMemorySize()
+	{
+		return SIZE_OF_POINT + estimateMemorySize(m_attributes);
+	}
+
+	@Override
 	public void setEmpty() {
 		_touch();
 		if (m_attributes != null) {
@@ -618,22 +626,22 @@ public class Point extends Geometry implements Serializable {
 		return hashCode;
 	}
 
-    @Override
-    public Geometry getBoundary() {
-        return null;
-    }
-    
-    @Override
-    public void replaceNaNs(int semantics, double value) {
-    	addAttribute(semantics);
-    	if (isEmpty())
-    		return;
-    	
-    	int ncomps = VertexDescription.getComponentCount(semantics);
-    	for (int i = 0; i < ncomps; i++) {
-    		double v = getAttributeAsDbl(semantics, i);
-    		if (Double.isNaN(v))
-    			setAttribute(semantics, i, value);
-    	}
-    }
+	@Override
+	public Geometry getBoundary() {
+		return null;
+	}
+
+	@Override
+	public void replaceNaNs(int semantics, double value) {
+		addAttribute(semantics);
+		if (isEmpty())
+			return;
+
+		int ncomps = VertexDescription.getComponentCount(semantics);
+		for (int i = 0; i < ncomps; i++) {
+			double v = getAttributeAsDbl(semantics, i);
+			if (Double.isNaN(v))
+				setAttribute(semantics, i, value);
+		}
+	}
 }

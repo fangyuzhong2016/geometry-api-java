@@ -1,5 +1,5 @@
 /*
- Copyright 1995-2017 Esri
+ Copyright 1995-2018 Esri
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,11 +24,44 @@
 
 package com.esri.core.geometry.ogc;
 
+import com.esri.core.geometry.Envelope;
+import com.esri.core.geometry.Envelope1D;
+import com.esri.core.geometry.Geometry;
+import com.esri.core.geometry.GeometryCursor;
+import com.esri.core.geometry.GeometryCursorAppend;
+import com.esri.core.geometry.GeometryEngine;
+import com.esri.core.geometry.JsonParserReader;
+import com.esri.core.geometry.MapGeometry;
+import com.esri.core.geometry.MapOGCStructure;
+import com.esri.core.geometry.MultiPoint;
+import com.esri.core.geometry.NumberUtils;
+import com.esri.core.geometry.OGCStructure;
+import com.esri.core.geometry.Operator;
+import com.esri.core.geometry.OperatorBuffer;
+import com.esri.core.geometry.OperatorCentroid2D;
+import com.esri.core.geometry.OperatorConvexHull;
+import com.esri.core.geometry.OperatorExportToGeoJson;
+import com.esri.core.geometry.OperatorExportToWkb;
+import com.esri.core.geometry.OperatorFactoryLocal;
+import com.esri.core.geometry.OperatorImportFromESRIShape;
+import com.esri.core.geometry.OperatorImportFromGeoJson;
+import com.esri.core.geometry.OperatorImportFromWkb;
+import com.esri.core.geometry.OperatorImportFromWkt;
+import com.esri.core.geometry.OperatorIntersection;
+import com.esri.core.geometry.OperatorSimplify;
+import com.esri.core.geometry.OperatorSimplifyOGC;
+import com.esri.core.geometry.OperatorUnion;
+import com.esri.core.geometry.Point;
+import com.esri.core.geometry.Point2D;
+import com.esri.core.geometry.Polygon;
+import com.esri.core.geometry.Polyline;
+import com.esri.core.geometry.SimpleGeometryCursor;
+import com.esri.core.geometry.SpatialReference;
+import com.esri.core.geometry.VertexDescription;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-
-import com.esri.core.geometry.*;
 
 /**
  * OGC Simple Feature Access specification v.1.2.1
@@ -52,6 +85,17 @@ public abstract class OGCGeometry {
 	}
 
 	abstract public String geometryType();
+
+	/**
+	 * Returns an estimate of this object size in bytes.
+	 * <p>
+	 * This estimate doesn't include the size of the {@link SpatialReference} object
+	 * because instances of {@link SpatialReference} are expected to be shared among
+	 * geometry objects.
+	 *
+	 * @return Returns an estimate of this object size in bytes.
+	 */
+	public abstract long estimateMemorySize();
 
 	public int SRID() {
 		if (esriSR == null)
@@ -209,23 +253,31 @@ public abstract class OGCGeometry {
 	 */
 	public boolean Equals(OGCGeometry another) {
 		if (this == another)
-			return true;
+			return !isEmpty();
 		
 		if (another == null)
 			return false;
+		
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return another.Equals(this);
+		}
 		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.equals(geom1, geom2,
 				getEsriSpatialReference());
 	}
-	
+
 	@Deprecated
 	public boolean equals(OGCGeometry another) {
 		return Equals(another);
 	}
 	
 	public boolean disjoint(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return another.disjoint(this);
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.disjoint(geom1, geom2,
@@ -237,6 +289,11 @@ public abstract class OGCGeometry {
 	}
 
 	public boolean touches(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			//TODO
+			throw new UnsupportedOperationException();
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.touches(geom1, geom2,
@@ -244,6 +301,11 @@ public abstract class OGCGeometry {
 	}
 
 	public boolean crosses(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			//TODO
+			throw new UnsupportedOperationException();
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.crosses(geom1, geom2,
@@ -251,13 +313,14 @@ public abstract class OGCGeometry {
 	}
 
 	public boolean within(OGCGeometry another) {
-		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
-		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
-		return com.esri.core.geometry.GeometryEngine.within(geom1, geom2,
-				getEsriSpatialReference());
+		return another.contains(this);
 	}
 
 	public boolean contains(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return new OGCConcreteGeometryCollection(this, esriSR).contains(another);
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.contains(geom1, geom2,
@@ -265,6 +328,11 @@ public abstract class OGCGeometry {
 	}
 
 	public boolean overlaps(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			// TODO
+			throw new UnsupportedOperationException();
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.overlaps(geom1, geom2,
@@ -272,6 +340,11 @@ public abstract class OGCGeometry {
 	}
 
 	public boolean relate(OGCGeometry another, String matrix) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			//TODO
+			throw new UnsupportedOperationException();
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.relate(geom1, geom2,
@@ -284,6 +357,14 @@ public abstract class OGCGeometry {
 
 	// analysis
 	public double distance(OGCGeometry another) {
+		if (this == another) {
+			return isEmpty() ? Double.NaN : 0;
+		}
+		
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return another.distance(this);
+		}
+
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return com.esri.core.geometry.GeometryEngine.distance(geom1, geom2,
@@ -385,15 +466,28 @@ public abstract class OGCGeometry {
 		return OGCGeometry.createFromEsriGeometry(cursor.next(), esriSR);
 	}
 
+	public OGCGeometry centroid() {
+		OperatorCentroid2D op = (OperatorCentroid2D) OperatorFactoryLocal.getInstance()
+				.getOperator(Operator.Type.Centroid2D);
+
+		Point2D centroid = op.execute(getEsriGeometry(), null);
+		if (centroid == null) {
+			return OGCGeometry.createFromEsriGeometry(new Point(), esriSR);
+		}
+		return OGCGeometry.createFromEsriGeometry(new Point(centroid), esriSR);
+	}
+
 	public OGCGeometry convexHull() {
-		com.esri.core.geometry.OperatorConvexHull op = (OperatorConvexHull) OperatorFactoryLocal
-				.getInstance().getOperator(Operator.Type.ConvexHull);
-		com.esri.core.geometry.GeometryCursor cursor = op.execute(
-				getEsriGeometryCursor(), true, null);
+		com.esri.core.geometry.GeometryCursor cursor = OperatorConvexHull.local().execute(
+				getEsriGeometryCursor(), false, null);
 		return OGCGeometry.createFromEsriCursor(cursor, esriSR);
 	}
 
 	public OGCGeometry intersection(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return (new OGCConcreteGeometryCollection(this, esriSR)).intersection(another);
+		}
+
 		com.esri.core.geometry.OperatorIntersection op = (OperatorIntersection) OperatorFactoryLocal
 				.getInstance().getOperator(Operator.Type.Intersection);
 		com.esri.core.geometry.GeometryCursor cursor = op.execute(
@@ -403,6 +497,18 @@ public abstract class OGCGeometry {
 	}
 
 	public OGCGeometry union(OGCGeometry another) {
+		String thisType = geometryType();
+		String anotherType = another.geometryType();
+		if (thisType != anotherType || thisType == OGCConcreteGeometryCollection.TYPE) {
+			//heterogeneous union.
+			//We make a geometry collection, then process to union parts and remove overlaps.
+			ArrayList<OGCGeometry> geoms = new ArrayList<OGCGeometry>();
+			geoms.add(this);
+			geoms.add(another);
+			OGCConcreteGeometryCollection geomCol = new OGCConcreteGeometryCollection(geoms, esriSR);
+			return geomCol.flattenAndRemoveOverlaps().reduceFromMulti();
+		}
+		
 		OperatorUnion op = (OperatorUnion) OperatorFactoryLocal.getInstance()
 				.getOperator(Operator.Type.Union);
 		GeometryCursorAppend ap = new GeometryCursorAppend(
@@ -413,6 +519,10 @@ public abstract class OGCGeometry {
 	}
 
 	public OGCGeometry difference(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			return (new OGCConcreteGeometryCollection(this, esriSR)).difference(another);
+		}
+		
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return createFromEsriGeometry(
@@ -421,6 +531,11 @@ public abstract class OGCGeometry {
 	}
 
 	public OGCGeometry symDifference(OGCGeometry another) {
+		if (another.geometryType() == OGCConcreteGeometryCollection.TYPE) {
+			// TODO
+			throw new UnsupportedOperationException();
+		}
+
 		com.esri.core.geometry.Geometry geom1 = getEsriGeometry();
 		com.esri.core.geometry.Geometry geom2 = another.getEsriGeometry();
 		return createFromEsriGeometry(
@@ -670,6 +785,17 @@ public abstract class OGCGeometry {
 	 */
 	public abstract OGCGeometry convertToMulti();
 
+	/**
+	 * For the geometry collection types, when it has 1 or 0 elements, converts a MultiPolygon to Polygon, 
+	 * MultiPoint to Point, MultiLineString to a LineString, and
+	 * OGCConcretGeometryCollection to the reduced element it contains.
+	 * 
+	 * If OGCConcretGeometryCollection is empty, returns self.
+	 * 
+	 * @return A reduced geometry or this.
+	 */
+	public abstract OGCGeometry reduceFromMulti();
+	
 	@Override
 	public String toString() {
 		String snippet = asText();
