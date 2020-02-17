@@ -1,6 +1,8 @@
 bin/
 results/
 javadoc/
+depfiles/
+DepFiles/
 esri-geometry-api.jar
 .project
 .classpath
@@ -36,3 +38,5 @@ Thumbs.db
 target/*
 /bin/
 /target/
+
+.metadata/

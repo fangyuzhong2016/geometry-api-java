@@ -24,18 +24,14 @@
 
 package com.esri.core.geometry;
 
-import java.io.*;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import com.esri.core.geometry.Envelope2D;
-import com.esri.core.geometry.Geometry;
-import com.esri.core.geometry.GeometryException;
-import com.esri.core.geometry.NumberUtils;
-import com.esri.core.geometry.Point2D;
-import com.esri.core.geometry.Segment;
-import com.esri.core.geometry.SegmentIteratorImpl;
-import com.esri.core.geometry.SimpleRasterizer;
+import static com.esri.core.geometry.SizeOf.SIZE_OF_RASTERIZED_GEOMETRY_2D_IMPL;
+import static com.esri.core.geometry.SizeOf.SIZE_OF_SCAN_CALLBACK_IMPL;
+import static com.esri.core.geometry.SizeOf.sizeOfIntArray;
 
 final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 	int[] m_bitmap;
@@ -89,6 +85,17 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 			}
 			}
 		}
+
+		/**
+		 * Returns an estimate of this object size in bytes.
+		 *
+		 * @return Returns an estimate of this object size in bytes.
+		 */
+		public long estimateMemorySize()
+		{
+			return SIZE_OF_SCAN_CALLBACK_IMPL +
+					(m_bitmap != null ? sizeOfIntArray(m_bitmap.length) : 0);
+		}
 	}
 
 	void fillMultiPath(SimpleRasterizer rasterizer, Transformation2D trans, MultiPathImpl polygon, boolean isWinding) {
@@ -138,10 +145,6 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 
 		SegmentIteratorImpl segIter = polyPath.querySegmentIterator();
 		double strokeHalfWidth = m_transform.transform(tol) + 1.5;
-		double shortSegment = 0.25;
-		Point2D vec = new Point2D();
-		Point2D vecA = new Point2D();
-		Point2D vecB = new Point2D();
 
 		Point2D ptStart = new Point2D();
 		Point2D ptEnd = new Point2D();
@@ -150,6 +153,7 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 		double[] helper_xy_10_elm = new double[10];
 		Envelope2D segEnv = new Envelope2D();
 		Point2D ptOld = new Point2D();
+		double extraWidth = 0;
 		while (segIter.nextPath()) {
 			boolean hasFan = false;
 			boolean first = true;
@@ -167,10 +171,11 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 					if (hasFan) {
 						rasterizer.startAddingEdges();
 						rasterizer.addSegmentStroke(prev_start.x, prev_start.y,
-								prev_end.x, prev_end.y, strokeHalfWidth, false,
+								prev_end.x, prev_end.y, strokeHalfWidth + extraWidth, false,
 								helper_xy_10_elm);
 						rasterizer.renderEdges(SimpleRasterizer.EVEN_ODD);
 						hasFan = false;
+						extraWidth = 0.0;
 					}
 
 					first = true;
@@ -192,19 +197,26 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 
 				rasterizer.startAddingEdges();
 				hasFan = !rasterizer.addSegmentStroke(prev_start.x,
-						prev_start.y, prev_end.x, prev_end.y, strokeHalfWidth,
+						prev_start.y, prev_end.x, prev_end.y, strokeHalfWidth + extraWidth,
 						true, helper_xy_10_elm);
 				rasterizer.renderEdges(SimpleRasterizer.EVEN_ODD);
-				if (!hasFan)
+				if (!hasFan) {
 					ptOld.setCoords(prev_end);
+					extraWidth = 0.0;
+				}
+				else {
+					//track length of skipped segment to add it to the stroke width for the next edge.
+					extraWidth = Math.max(extraWidth, Point2D.distance(prev_start, prev_end));
+				}
 			}
 
 			if (hasFan) {
 				rasterizer.startAddingEdges();
 				hasFan = !rasterizer.addSegmentStroke(prev_start.x,
-						prev_start.y, prev_end.x, prev_end.y, strokeHalfWidth,
+						prev_start.y, prev_end.x, prev_end.y, strokeHalfWidth + extraWidth,
 						false, helper_xy_10_elm);
 				rasterizer.renderEdges(SimpleRasterizer.EVEN_ODD);
+				extraWidth = 0.0;
 			}
 		}
 	}
@@ -305,12 +317,10 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 		m_transform = new Transformation2D();
 		m_transform.initializeFromRect(worldEnv, pixEnv);// geom to pixels
 
-		Transformation2D identityTransform = new Transformation2D();
-
 		switch (geom.getType().value()) {
 		case Geometry.GeometryType.MultiPoint:
 			callback.setColor(m_rasterizer, 2);
-     		fillPoints(m_rasterizer, (MultiPointImpl) geom, m_stroke_half_width);
+			fillPoints(m_rasterizer, (MultiPointImpl) geom, m_stroke_half_width);
 			break;
 		case Geometry.GeometryType.Polyline:
 			callback.setColor(m_rasterizer, 2);
@@ -542,7 +552,6 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 			// int32_t* rgb4 = (int32_t*)malloc(biSizeImage);
 			for (int y = 0; y < height; y++) {
 				int scanlineIn = y * ((width * 2 + 31) / 32);
-				int scanlineOut = offset + width * y;
 
 				for (int x = 0; x < width; x++) {
 					int res = (m_bitmap[scanlineIn + (x >> 4)] >> ((x & 15) * 2)) & 3;
@@ -558,5 +567,15 @@ final class RasterizedGeometry2DImpl extends RasterizedGeometry2D {
 			return false;
 
 		}
+	}
+
+	@Override
+	public long estimateMemorySize()
+	{
+		return SIZE_OF_RASTERIZED_GEOMETRY_2D_IMPL +
+				(m_geomEnv != null ? m_geomEnv.estimateMemorySize() : 0) +
+				(m_transform != null ? m_transform.estimateMemorySize(): 0) +
+				(m_rasterizer != null ? m_rasterizer.estimateMemorySize(): 0) +
+				(m_callback != null ? m_callback.estimateMemorySize(): 0);
 	}
 }
